@@ -3,21 +3,24 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { usePrefs } from "@/components/PrefsProvider";
 
 const STUDENT = [
-  { href: "/dashboard", gl: "首", vi: "Bảng điều khiển" },
-  { href: "/learn", gl: "階", vi: "Lộ trình học" },
-  { href: "/homework", gl: "業", vi: "Bài tập" },
-  { href: "/review", gl: "複", vi: "Ôn tập" },
+  { href: "/dashboard", gl: "覽", key: "nav.dashboard" },
+  { href: "/learn", gl: "階", key: "nav.learn" },
+  { href: "/homework", gl: "業", key: "nav.homework" },
+  { href: "/review", gl: "複", key: "nav.review" },
+  { href: "/placement", gl: "測", key: "nav.placement" },
 ];
 const TEACHER = [
-  { href: "/teacher", gl: "班", vi: "Lớp học" },
-  { href: "/teacher/assign", gl: "派", vi: "Giao bài tập" },
+  { href: "/teacher", gl: "班", key: "nav.class" },
+  { href: "/teacher/assign", gl: "派", key: "nav.assign" },
 ];
 
 export function Rail({ isTeacher }: { isTeacher: boolean }) {
   const path = usePathname();
   const router = useRouter();
+  const { t } = usePrefs();
 
   async function signOut() {
     const supabase = createClient();
@@ -37,7 +40,7 @@ export function Rail({ isTeacher }: { isTeacher: boolean }) {
       </Link>
 
       <div>
-        <div className="navlbl">Học viên</div>
+        <div className="navlbl">{t("nav.section.student")}</div>
         {STUDENT.map((n) => (
           <Link
             key={n.href}
@@ -46,14 +49,14 @@ export function Rail({ isTeacher }: { isTeacher: boolean }) {
             data-active={path === n.href || path.startsWith(n.href + "/")}
           >
             <span className="gl">{n.gl}</span>
-            {n.vi}
+            {t(n.key)}
           </Link>
         ))}
       </div>
 
       {isTeacher && (
         <div>
-          <div className="navlbl">Giáo viên</div>
+          <div className="navlbl">{t("nav.section.teacher")}</div>
           {TEACHER.map((n) => (
             <Link
               key={n.href}
@@ -64,7 +67,7 @@ export function Rail({ isTeacher }: { isTeacher: boolean }) {
               }
             >
               <span className="gl">{n.gl}</span>
-              {n.vi}
+              {t(n.key)}
             </Link>
           ))}
         </div>
@@ -72,7 +75,8 @@ export function Rail({ isTeacher }: { isTeacher: boolean }) {
 
       <div className="railfoot">
         <button className="nav" onClick={signOut} style={{ padding: "6px 8px" }}>
-          <span className="gl">出</span>Đăng xuất
+          <span className="gl">出</span>
+          {t("nav.signout")}
         </button>
       </div>
     </aside>
