@@ -44,10 +44,21 @@ declare
   v_role  user_role;
   v_class bigint;
 begin
-  select s.role into v_role
-    from public.staff_emails s
-   where lower(s.email) = lower(new.email);
+  -- Tra白名單. Nếu bảng chưa tồn tại hay lỗi gì thì coi như học viên thường.
+  -- 查白名單；查不到或出錯就當一般學生，絕不能讓註冊失敗。
+  begin
+    select s.role into v_role
+      from public.staff_emails s
+     where lower(s.email) = lower(new.email);
+  exception when others then
+    v_role := null;
+  end;
 
+  -- Phần BẮT BUỘC phải thành công: tạo profile. Không bọc exception ở đây.
+  -- 這段一定要成功：建立 profile。
+  -- Lưu ý: trong ON CONFLICT DO UPDATE phải viết "profiles.role",
+  -- KHÔNG được viết "public.profiles.role" — Postgres sẽ báo lỗi.
+  -- 注意：ON CONFLICT DO UPDATE 裡只能寫 profiles.role，不能加 public. 前綴。
   insert into public.profiles (id, display_name, native_lang, role, ui_lang)
   values (
     new.id,
@@ -59,27 +70,35 @@ begin
     case when v_role is null then 'vi' else 'zh' end
   )
   on conflict (id) do update
-    set role    = coalesce(v_role, public.profiles.role),
-        ui_lang = case when v_role is null then public.profiles.ui_lang else 'zh' end;
+    set role    = coalesce(v_role, profiles.role),
+        ui_lang = case when v_role is null then profiles.ui_lang else 'zh' end;
 
   -- Nhân sự đầu tiên: tạo sẵn lớp mặc định và gom học viên chưa có lớp.
+  -- Bọc exception: hỏng chỗ này cũng KHÔNG được chặn việc đăng ký.
   -- 第一個教職員：順手建好預設班級，把還沒分班的學生收進來。
+  -- 這段包了例外處理：就算出錯也不能擋住註冊。
   if v_role in ('teacher', 'admin') then
-    insert into public.classes (name, code, teacher_id)
-    values ('QNA 2026A', 'QNA-2026A', new.id)
-    on conflict (code) do nothing
-    returning id into v_class;
+    begin
+      insert into public.classes (name, code, teacher_id)
+      values ('QNA 2026A', 'QNA-2026A', new.id)
+      on conflict (code) do nothing
+      returning id into v_class;
 
-    if v_class is null then
-      select id into v_class from public.classes where code = 'QNA-2026A';
-    end if;
+      if v_class is null then
+        select id into v_class from public.classes where code = 'QNA-2026A';
+      end if;
 
-    insert into public.enrollments (class_id, student_id)
-    select v_class, p.id
-      from public.profiles p
-     where p.role = 'student'
-       and not exists (select 1 from public.enrollments e where e.student_id = p.id)
-    on conflict do nothing;
+      if v_class is not null then
+        insert into public.enrollments (class_id, student_id)
+        select v_class, p.id
+          from public.profiles p
+         where p.role = 'student'
+           and not exists (select 1 from public.enrollments e where e.student_id = p.id)
+        on conflict do nothing;
+      end if;
+    exception when others then
+      raise warning 'staff bootstrap skipped: %', sqlerrm;
+    end;
   end if;
 
   return new;
